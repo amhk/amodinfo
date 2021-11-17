@@ -17,7 +17,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mmap = unsafe { MmapOptions::new().map(&file)? };
         let data = std::str::from_utf8(&mmap)?;
         let modinfo = ModuleInfo::try_from(&*data)?;
-        println!("{}", modinfo.module_names().join("\n"));
+        if let Some(name) = args.next() {
+            println!("{:?}", modinfo.find(&name));
+        } else {
+            println!("{}", modinfo.module_names().join("\n"));
+        }
     }
     Ok(())
 }

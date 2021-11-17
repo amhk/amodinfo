@@ -3,7 +3,7 @@ use std::{error::Error, fmt};
 #[derive(Debug)]
 pub struct ParseError {
     pub lineno: usize,
-    pub message: &'static str,
+    pub message: String,
 }
 
 impl Error for ParseError {}
