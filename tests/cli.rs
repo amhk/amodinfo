@@ -67,4 +67,16 @@ mod integration {
 
         Ok(())
     }
+
+    #[test]
+    fn implicit_module_info_path() -> Result<(), Box<dyn Error>> {
+        Command::cargo_bin("amodinfo")?
+            .env("ANDROID_PRODUCT_OUT", "tests/data")
+            .arg("show")
+            .arg("idmap2")
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("frameworks/base/cmds/idmap2"));
+        Ok(())
+    }
 }
