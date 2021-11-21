@@ -19,3 +19,4 @@ features = [
 
 [dev-dependencies]
 assert_cmd = "2.0"
+predicates = "2.0"
