@@ -20,7 +20,7 @@ struct Arguments {
 #[derive(Debug)]
 enum Command {
     List,
-    Show(String),
+    Show(String, Option<String>),
 }
 
 fn parse_args() -> Result<Arguments, CLIError> {
@@ -33,7 +33,11 @@ fn parse_args() -> Result<Arguments, CLIError> {
                 .takes_value(true),
         )
         .subcommand(App::new("list"))
-        .subcommand(App::new("show").arg(Arg::with_name("NAME").required(true)))
+        .subcommand(
+            App::new("show")
+                .arg(Arg::with_name("NAME").required(true))
+                .arg(Arg::with_name("FIELD")),
+        )
         .get_matches();
 
     let module_info_path = if matches.is_present("module-info") {
@@ -52,6 +56,7 @@ fn parse_args() -> Result<Arguments, CLIError> {
             args.value_of("NAME")
                 .expect("value guaranteed by clap")
                 .to_string(),
+            args.value_of("FIELD").map(|s| s.to_string()),
         ),
         (_, _) => unreachable!(),
     };
@@ -76,13 +81,30 @@ fn main() -> Result<(), Box<dyn Error>> {
         Command::List => {
             println!("{}", modinfo.module_names().join("\n"));
         }
-        Command::Show(name) => {
-            println!(
-                "{:#?}",
-                modinfo
-                    .find(&name)
-                    .ok_or_else(|| CLIError(format!("{}: module not found", name)))??
-            );
+        Command::Show(name, field) => {
+            let module = modinfo
+                .find(&name)
+                .ok_or_else(|| CLIError(format!("{}: module not found", name)))??;
+
+            if let Some(f) = &field {
+                match f.as_str() {
+                    "name" => println!("{}", module.name),
+                    "path" => println!("{}", module.path.join("\n")),
+                    "installed" => println!("{}", module.installed.join("\n")),
+                    "dependencies" => println!("{}", module.dependencies.join("\n")),
+                    "class" => println!("{}", module.class.join("\n")),
+                    "tags" => println!("{}", module.tags.join("\n")),
+                    "test_config" => println!("{}", module.test_config.join("\n")),
+                    _ => {
+                        return Err(Box::new(CLIError(format!(
+                            "{}: unknown field",
+                            field.unwrap()
+                        ))))
+                    }
+                }
+            } else {
+                println!("{:#?}", module);
+            }
         }
     }
 
