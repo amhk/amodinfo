@@ -23,20 +23,37 @@ enum Command {
     Show(String, Option<String>),
 }
 
+const MODULE_FIELDS: [&str; 7] = [
+    "name",
+    "path",
+    "installed",
+    "dependencies",
+    "class",
+    "tags",
+    "test_config",
+];
+
 fn parse_args() -> Result<Arguments, CLIError> {
     let matches = App::new("amodinfo")
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .arg(
             Arg::with_name("module-info")
+                .help("Path to module-info.json")
+                .long_help("Path to module-info.json; defaults to `$ANDROID_PRODUCT_OUT/module-info.json` if $ANDROID_PRODUCT_OUT is set.")
                 .long("module-info")
                 .value_name("FILE")
                 .takes_value(true),
         )
-        .subcommand(App::new("list"))
+        .subcommand(App::new("list").about("Prints the names of all modules"))
         .subcommand(
             App::new("show")
-                .arg(Arg::with_name("NAME").required(true))
-                .arg(Arg::with_name("FIELD")),
+                .about("Prints information about a given module")
+                .arg(Arg::with_name("NAME")
+                    .help("Name of module to show")
+                    .required(true))
+                .arg(Arg::with_name("FIELD")
+                    .help("Name of field to show")
+                    .possible_values(&MODULE_FIELDS)),
         )
         .get_matches();
 
