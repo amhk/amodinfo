@@ -92,7 +92,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // thus making it safe to memory map the file
     let mmap = unsafe { MmapOptions::new().map(&file)? };
     let data = std::str::from_utf8(&mmap)?;
-    let modinfo = ModuleInfo::try_from(&*data)?;
+    let modinfo = ModuleInfo::try_from(data)?;
 
     match args.command {
         Command::List => {
