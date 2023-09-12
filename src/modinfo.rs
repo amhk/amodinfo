@@ -60,16 +60,16 @@ impl<'data> TryFrom<&'data str> for ModuleInfo<'data> {
             });
         }
 
-        // split '  "name": { ... }[,]' into ('name', '{ ... }')
+        // split ' "name": { ... }[,]' into ('name', '{ ... }')
         let mut data = Vec::with_capacity(lines.len());
-        for (lineno, line) in lines.iter().enumerate().map(|pair| (pair.0 + 2, pair.1)) {
-            if !line.starts_with("  \"") {
+        for (lineno, line) in lines.iter().enumerate().map(|pair| (pair.0 + 1, pair.1)) {
+            if !line.starts_with(" \"") {
                 return Err(ParseError {
                     lineno,
                     message: "no <name> element".to_string(),
                 });
             }
-            let line = &line[3..];
+            let line = &line[2..];
             let name_end = line.find('"').ok_or(ParseError {
                 lineno,
                 message: "<name> element not terminated".to_string(),
@@ -115,33 +115,36 @@ mod tests {
         assert!(ModuleInfo::try_from("{").is_err());
 
         // corrupt input
-        assert!(ModuleInfo::try_from("{\n  foo\": { ... }\n}\n").is_err());
-        assert!(ModuleInfo::try_from("{\n  \"foo: { ... }\n}\n").is_err());
-        assert!(ModuleInfo::try_from("{\n  \"foo\": ... }\n}\n").is_err());
-        assert!(ModuleInfo::try_from("{\n  \"foo\": { ... \n}\n").is_err());
+        assert!(ModuleInfo::try_from("{\n foo\": { ... }\n}\n").is_err());
+        assert!(ModuleInfo::try_from("{\n \"foo: { ... }\n}\n").is_err());
+        assert!(ModuleInfo::try_from("{\n \"foo\": ... }\n}\n").is_err());
+        assert!(ModuleInfo::try_from("{\n \"foo\": { ... \n}\n").is_err());
 
         // correct input
         let modinfo = ModuleInfo::try_from("{\n}\n").unwrap();
         assert_eq!(modinfo.data.len(), 0);
 
-        let modinfo = ModuleInfo::try_from("{\n  \"foo\": { ... }\n}\n").unwrap();
+        let modinfo = ModuleInfo::try_from("{\n \"foo\": { ... }\n}\n").unwrap();
         assert_eq!(modinfo.data.len(), 1);
 
         let modinfo = ModuleInfo::try_from(MODULE_INFO).unwrap();
-        assert_eq!(modinfo.data.len(), 52638);
+        assert_eq!(modinfo.data.len(), 64225);
     }
 
     #[test]
     fn test_module_names() {
         let modinfo = ModuleInfo::try_from(MODULE_INFO).unwrap();
         let names = modinfo.module_names();
-        assert_eq!(names.len(), 52638);
+        assert_eq!(names.len(), 64225);
+        let mut sorted = names.clone();
+        sorted.sort();
+        assert_eq!(names, sorted);
         assert!(names.contains(&"idmap2"));
     }
 
     #[test]
     fn test_find() {
-        let modinfo = ModuleInfo::try_from("{\n  \"foo\": { ... }\n}\n").unwrap();
+        let modinfo = ModuleInfo::try_from("{\n \"foo\": { ... }\n}\n").unwrap();
         let module = modinfo.find("foo");
         assert!(module.is_some());
         let module = module.unwrap();
