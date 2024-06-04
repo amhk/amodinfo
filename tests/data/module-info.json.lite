@@ -1,0 +1,79 @@
+{
+  "202404.compat.cil": {
+    "class": [
+      "ETC"
+    ],
+    "installed": [
+      "out/target/product/vsoc_x86_64/system/etc/selinux/mapping/202404.compat.cil"
+    ],
+    "module_name": "202404.compat.cil",
+    "path": [
+      "system/sepolicy/compat"
+    ],
+    "supported_variants": [
+      "DEVICE"
+    ],
+    "system_shared_libs": [
+      "none"
+    ]
+  },
+  "202404.ignore.cil": {
+    "class": [
+      "ETC"
+    ],
+    "installed": [
+      "out/target/product/vsoc_x86_64/system/etc/selinux/mapping/202404.ignore.cil"
+    ],
+    "module_name": "202404.ignore.cil",
+    "path": [
+      "system/sepolicy/compat"
+    ],
+    "supported_variants": [
+      "DEVICE"
+    ],
+    "system_shared_libs": [
+      "none"
+    ]
+  },
+  "zxing-core": {
+    "class": [
+      "JAVA_LIBRARIES"
+    ],
+    "classes_jar": [
+      "out/target/common/obj/JAVA_LIBRARIES/zxing-core_intermediates/classes.jar"
+    ],
+    "installed": [
+      "out/host/linux-x86/framework/zxing-core.jar"
+    ],
+    "module_name": "zxing-core",
+    "path": [
+      "external/zxing"
+    ],
+    "supported_variants": [
+      "DEVICE",
+      "HOST"
+    ],
+    "system_shared_libs": [
+      "none"
+    ]
+  },
+  "zxing-core-1.7": {
+    "class": [
+      "JAVA_LIBRARIES"
+    ],
+    "classes_jar": [
+      "out/target/common/obj/JAVA_LIBRARIES/zxing-core-1.7_intermediates/classes.jar"
+    ],
+    "module_name": "zxing-core-1.7",
+    "path": [
+      "external/zxing"
+    ],
+    "supported_variants": [
+      "DEVICE",
+      "HOST"
+    ],
+    "system_shared_libs": [
+      "none"
+    ]
+  }
+}

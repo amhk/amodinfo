@@ -1,7 +1,9 @@
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{anyhow, ensure, Result};
+use regex::Regex;
 use serde::Deserialize;
 
 pub struct ModuleInfo<'data> {
+    // vector of (module-name, json-data), sorted by module-name
     data: Vec<(&'data str, &'data str)>,
 }
 
@@ -11,10 +13,12 @@ pub struct Module<'data> {
     pub name: &'data str,
     pub path: Vec<&'data str>,
     pub installed: Vec<&'data str>,
-    pub dependencies: Vec<&'data str>,
+    pub dependencies: Option<Vec<&'data str>>,
     pub class: Vec<&'data str>,
-    pub tags: Vec<&'data str>,
-    pub test_config: Vec<&'data str>,
+    pub supported_variants: Option<Vec<&'data str>>,
+    pub shared_libs: Option<Vec<&'data str>>,
+    pub static_libs: Option<Vec<&'data str>>,
+    pub system_shared_libs: Option<Vec<&'data str>>,
 }
 
 impl<'data> ModuleInfo<'data> {
@@ -34,44 +38,15 @@ impl<'data> TryFrom<&'data str> for ModuleInfo<'data> {
     type Error = anyhow::Error;
 
     fn try_from(data: &'data str) -> Result<Self> {
-        ensure!(data.starts_with("{\n"), "bad first line");
-        let mut lines = data.split_terminator('\n').skip(1).collect::<Vec<_>>();
-        if let Some(last) = lines.pop() {
-            ensure!(last == "}", "bad last line");
-        } else {
-            bail!("too few lines");
+        let regex = Regex::new(r#"(?ms)^  "([^"]+)": (\{[^\}]+\})"#).unwrap();
+        let mut out = vec![];
+        for cap in regex.captures_iter(data) {
+            let name = cap.get(1).unwrap().as_str();
+            let json = cap.get(2).unwrap().as_str();
+            out.push((name, json));
         }
-
-        // split ' "name": { ... }[,]' into ('name', '{ ... }')
-        let mut data = Vec::with_capacity(lines.len());
-        for (lineno, line) in lines.iter().enumerate().map(|pair| (pair.0 + 1, pair.1)) {
-            ensure!(line.starts_with(" \""), "{}: no <name> element", lineno);
-            let line = &line[2..];
-            let name_end = line
-                .find('"')
-                .ok_or_else(|| anyhow!("{}: <name> element not terminated", lineno))?;
-            let name = &line[..name_end];
-
-            let line = &line[name_end..];
-            ensure!(
-                line.starts_with("\": {"),
-                "{}: bad <name> terminator",
-                lineno
-            );
-            let mut json = &line[3..];
-            if json.ends_with(',') {
-                json = &json[..json.len() - 1];
-            }
-            ensure!(
-                json.ends_with('}'),
-                "{}: <json> element not terminated",
-                lineno
-            );
-
-            data.push((name, json));
-        }
-
-        Ok(ModuleInfo { data })
+        ensure!(!out.is_empty(), "empty input");
+        Ok(ModuleInfo { data: out })
     }
 }
 
@@ -79,7 +54,7 @@ impl<'data> TryFrom<&'data str> for ModuleInfo<'data> {
 mod tests {
     use super::*;
 
-    const MODULE_INFO: &str = include_str!("../tests/data/module-info.json");
+    const MODULE_INFO_LITE: &str = include_str!("../tests/data/module-info.json.lite");
 
     #[test]
     fn test_try_from() {
@@ -95,38 +70,27 @@ mod tests {
         assert!(ModuleInfo::try_from("{\n \"foo\": { ... \n}\n").is_err());
 
         // correct input
-        let modinfo = ModuleInfo::try_from("{\n}\n").unwrap();
-        assert_eq!(modinfo.data.len(), 0);
-
-        let modinfo = ModuleInfo::try_from("{\n \"foo\": { ... }\n}\n").unwrap();
-        assert_eq!(modinfo.data.len(), 1);
-
-        let modinfo = ModuleInfo::try_from(MODULE_INFO).unwrap();
-        assert_eq!(modinfo.data.len(), 64225);
+        let modinfo = ModuleInfo::try_from(MODULE_INFO_LITE).unwrap();
+        assert_eq!(modinfo.data.len(), 4);
     }
 
     #[test]
     fn test_module_names() {
-        let modinfo = ModuleInfo::try_from(MODULE_INFO).unwrap();
+        let modinfo = ModuleInfo::try_from(MODULE_INFO_LITE).unwrap();
         let names = modinfo.module_names();
-        assert_eq!(names.len(), 64225);
+        assert_eq!(names.len(), 4);
         let mut sorted = names.clone();
         sorted.sort();
         assert_eq!(names, sorted);
-        assert!(names.contains(&"idmap2"));
+        assert!(names.contains(&"zxing-core"));
     }
 
     #[test]
     fn test_find() {
-        let modinfo = ModuleInfo::try_from("{\n \"foo\": { ... }\n}\n").unwrap();
-        let module = modinfo.find("foo");
-        assert!(module.is_some());
-        let module = module.unwrap();
-        assert!(module.is_err());
-
-        let modinfo = ModuleInfo::try_from(MODULE_INFO).unwrap();
-        let module = modinfo.find("idmap2").unwrap().unwrap();
-        assert_eq!(module.name, "idmap2");
+        let modinfo = ModuleInfo::try_from(MODULE_INFO_LITE).unwrap();
+        let module = modinfo.find("zxing-core").unwrap().unwrap();
+        assert_eq!(module.name, "zxing-core");
+        assert_eq!(module.path, ["external/zxing"]);
 
         let module = modinfo.find("does-not-exist");
         assert!(module.is_none());

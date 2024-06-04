@@ -22,14 +22,16 @@ enum Command {
     Show(String, Option<String>),
 }
 
-const MODULE_FIELDS: [&str; 7] = [
+const MODULE_FIELDS: [&str; 9] = [
     "name",
     "path",
     "installed",
     "dependencies",
     "class",
-    "tags",
-    "test_config",
+    "supported_variants",
+    "shared_libs",
+    "static_libs",
+    "system_shared_libs",
 ];
 
 fn parse_args() -> Result<Arguments> {
@@ -83,6 +85,12 @@ fn parse_args() -> Result<Arguments> {
     })
 }
 
+fn print_field(field: Option<Vec<&str>>) {
+    if let Some(vec) = field {
+        println!("{}", vec.join("\n"));
+    }
+}
+
 fn main() -> Result<()> {
     let args = parse_args()?;
 
@@ -105,12 +113,14 @@ fn main() -> Result<()> {
             if let Some(f) = &field {
                 match f.as_str() {
                     "name" => println!("{}", module.name),
-                    "path" => println!("{}", module.path.join("\n")),
-                    "installed" => println!("{}", module.installed.join("\n")),
-                    "dependencies" => println!("{}", module.dependencies.join("\n")),
-                    "class" => println!("{}", module.class.join("\n")),
-                    "tags" => println!("{}", module.tags.join("\n")),
-                    "test_config" => println!("{}", module.test_config.join("\n")),
+                    "path" => print_field(Some(module.path)),
+                    "installed" => print_field(Some(module.installed)),
+                    "dependencies" => print_field(module.dependencies),
+                    "class" => print_field(Some(module.class)),
+                    "supported_variants" => print_field(module.supported_variants),
+                    "shared_libs" => print_field(module.shared_libs),
+                    "static_libs" => print_field(module.static_libs),
+                    "system_shared_libs" => print_field(module.system_shared_libs),
                     _ => {
                         bail!("{}: unknown field", field.unwrap());
                     }
