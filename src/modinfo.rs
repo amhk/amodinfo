@@ -1,6 +1,5 @@
+use anyhow::{anyhow, bail, ensure, Result};
 use serde::Deserialize;
-
-use crate::error::ParseError;
 
 pub struct ModuleInfo<'data> {
     data: Vec<(&'data str, &'data str)>,
@@ -23,76 +22,51 @@ impl<'data> ModuleInfo<'data> {
         self.data.iter().map(|line| line.0).collect()
     }
 
-    pub fn find(&self, name: &str) -> Option<Result<Module, ParseError>> {
+    pub fn find(&self, name: &str) -> Option<Result<Module>> {
         let index = self.data.binary_search_by(|pair| pair.0.cmp(name)).ok()?;
         let json = self.data[index].1;
-        let x = serde_json::from_str(json).map_err(|e| ParseError {
-            lineno: index + 2, // offset by two: omitted inital line + start counting from 1
-            message: format!("bad JSON: {}", e),
-        });
+        let x = serde_json::from_str(json).map_err(|e| anyhow!("bad JSON: {}", e));
         Some(x)
     }
 }
 
 impl<'data> TryFrom<&'data str> for ModuleInfo<'data> {
-    type Error = ParseError;
+    type Error = anyhow::Error;
 
-    fn try_from(data: &'data str) -> Result<Self, Self::Error> {
-        if !data.starts_with("{\n") {
-            return Err(ParseError {
-                lineno: 1,
-                message: "bad first line".to_string(),
-            });
-        }
+    fn try_from(data: &'data str) -> Result<Self> {
+        ensure!(data.starts_with("{\n"), "bad first line");
         let mut lines = data.split_terminator('\n').skip(1).collect::<Vec<_>>();
-        let n_lines = lines.len();
         if let Some(last) = lines.pop() {
-            if last != "}" {
-                return Err(ParseError {
-                    lineno: n_lines,
-                    message: "bad last line".to_string(),
-                });
-            }
+            ensure!(last == "}", "bad last line");
         } else {
-            return Err(ParseError {
-                lineno: 1,
-                message: "too few lines".to_string(),
-            });
+            bail!("too few lines");
         }
 
         // split ' "name": { ... }[,]' into ('name', '{ ... }')
         let mut data = Vec::with_capacity(lines.len());
         for (lineno, line) in lines.iter().enumerate().map(|pair| (pair.0 + 1, pair.1)) {
-            if !line.starts_with(" \"") {
-                return Err(ParseError {
-                    lineno,
-                    message: "no <name> element".to_string(),
-                });
-            }
+            ensure!(line.starts_with(" \""), "{}: no <name> element", lineno);
             let line = &line[2..];
-            let name_end = line.find('"').ok_or(ParseError {
-                lineno,
-                message: "<name> element not terminated".to_string(),
-            })?;
+            let name_end = line
+                .find('"')
+                .ok_or_else(|| anyhow!("{}: <name> element not terminated", lineno))?;
             let name = &line[..name_end];
 
             let line = &line[name_end..];
-            if !line.starts_with("\": {") {
-                return Err(ParseError {
-                    lineno,
-                    message: "bad <name> terminator".to_string(),
-                });
-            }
+            ensure!(
+                line.starts_with("\": {"),
+                "{}: bad <name> terminator",
+                lineno
+            );
             let mut json = &line[3..];
             if json.ends_with(',') {
                 json = &json[..json.len() - 1];
             }
-            if !json.ends_with('}') {
-                return Err(ParseError {
-                    lineno,
-                    message: "<json> element not terminated".to_string(),
-                });
-            }
+            ensure!(
+                json.ends_with('}'),
+                "{}: <json> element not terminated",
+                lineno
+            );
 
             data.push((name, json));
         }

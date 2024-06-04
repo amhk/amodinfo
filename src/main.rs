@@ -1,14 +1,13 @@
 use clap::{App, AppSettings, Arg};
 use memmap::MmapOptions;
 use std::env;
-use std::error::Error;
 use std::fs::File;
 use std::path::PathBuf;
 
-mod error;
+use anyhow::{anyhow, bail, Result};
+
 mod modinfo;
 
-use error::CLIError;
 use modinfo::ModuleInfo;
 
 #[derive(Debug)]
@@ -33,7 +32,7 @@ const MODULE_FIELDS: [&str; 7] = [
     "test_config",
 ];
 
-fn parse_args() -> Result<Arguments, CLIError> {
+fn parse_args() -> Result<Arguments> {
     let matches = App::new("amodinfo")
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .arg(
@@ -60,8 +59,8 @@ fn parse_args() -> Result<Arguments, CLIError> {
     let module_info_path = if matches.is_present("module-info") {
         matches.value_of("module-info").unwrap().into()
     } else {
-        let prefix = env::var("ANDROID_PRODUCT_OUT")
-            .map_err(|_| CLIError("ANDROID_PRODUCT_OUT not set".to_string()))?;
+        let prefix =
+            env::var("ANDROID_PRODUCT_OUT").map_err(|_| anyhow!("ANDROID_PRODUCT_OUT not set"))?;
         let mut path = PathBuf::from(prefix);
         path.push("module-info.json");
         path
@@ -84,7 +83,7 @@ fn parse_args() -> Result<Arguments, CLIError> {
     })
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<()> {
     let args = parse_args()?;
 
     let file = File::open(args.module_info_path)?;
@@ -101,7 +100,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Command::Show(name, field) => {
             let module = modinfo
                 .find(&name)
-                .ok_or_else(|| CLIError(format!("{}: module not found", name)))??;
+                .ok_or_else(|| anyhow!("{}: module not found", name))??;
 
             if let Some(f) = &field {
                 match f.as_str() {
@@ -113,10 +112,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     "tags" => println!("{}", module.tags.join("\n")),
                     "test_config" => println!("{}", module.test_config.join("\n")),
                     _ => {
-                        return Err(Box::new(CLIError(format!(
-                            "{}: unknown field",
-                            field.unwrap()
-                        ))))
+                        bail!("{}: unknown field", field.unwrap());
                     }
                 }
             } else {
