@@ -36,6 +36,7 @@ const MODULE_FIELDS: [&str; 9] = [
 
 fn parse_args() -> Result<Arguments> {
     let matches = App::new("amodinfo")
+        .version(env!("CARGO_PKG_VERSION"))
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .arg(
             Arg::with_name("module-info")
