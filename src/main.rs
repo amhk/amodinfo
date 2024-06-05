@@ -1,14 +1,13 @@
 use clap::{App, AppSettings, Arg};
 use memmap::MmapOptions;
 use std::env;
-use std::error::Error;
 use std::fs::File;
 use std::path::PathBuf;
 
-mod error;
+use anyhow::{anyhow, bail, Result};
+
 mod modinfo;
 
-use error::CLIError;
 use modinfo::ModuleInfo;
 
 #[derive(Debug)]
@@ -23,18 +22,21 @@ enum Command {
     Show(String, Option<String>),
 }
 
-const MODULE_FIELDS: [&str; 7] = [
+const MODULE_FIELDS: [&str; 9] = [
     "name",
     "path",
     "installed",
     "dependencies",
     "class",
-    "tags",
-    "test_config",
+    "supported_variants",
+    "shared_libs",
+    "static_libs",
+    "system_shared_libs",
 ];
 
-fn parse_args() -> Result<Arguments, CLIError> {
+fn parse_args() -> Result<Arguments> {
     let matches = App::new("amodinfo")
+        .version(env!("CARGO_PKG_VERSION"))
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .arg(
             Arg::with_name("module-info")
@@ -60,8 +62,8 @@ fn parse_args() -> Result<Arguments, CLIError> {
     let module_info_path = if matches.is_present("module-info") {
         matches.value_of("module-info").unwrap().into()
     } else {
-        let prefix = env::var("ANDROID_PRODUCT_OUT")
-            .map_err(|_| CLIError("ANDROID_PRODUCT_OUT not set".to_string()))?;
+        let prefix =
+            env::var("ANDROID_PRODUCT_OUT").map_err(|_| anyhow!("ANDROID_PRODUCT_OUT not set"))?;
         let mut path = PathBuf::from(prefix);
         path.push("module-info.json");
         path
@@ -84,7 +86,13 @@ fn parse_args() -> Result<Arguments, CLIError> {
     })
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn print_field(field: Option<Vec<&str>>) {
+    if let Some(vec) = field {
+        println!("{}", vec.join("\n"));
+    }
+}
+
+fn main() -> Result<()> {
     let args = parse_args()?;
 
     let file = File::open(args.module_info_path)?;
@@ -101,22 +109,21 @@ fn main() -> Result<(), Box<dyn Error>> {
         Command::Show(name, field) => {
             let module = modinfo
                 .find(&name)
-                .ok_or_else(|| CLIError(format!("{}: module not found", name)))??;
+                .ok_or_else(|| anyhow!("{}: module not found", name))??;
 
             if let Some(f) = &field {
                 match f.as_str() {
                     "name" => println!("{}", module.name),
-                    "path" => println!("{}", module.path.join("\n")),
-                    "installed" => println!("{}", module.installed.join("\n")),
-                    "dependencies" => println!("{}", module.dependencies.join("\n")),
-                    "class" => println!("{}", module.class.join("\n")),
-                    "tags" => println!("{}", module.tags.join("\n")),
-                    "test_config" => println!("{}", module.test_config.join("\n")),
+                    "path" => print_field(Some(module.path)),
+                    "installed" => print_field(Some(module.installed)),
+                    "dependencies" => print_field(module.dependencies),
+                    "class" => print_field(Some(module.class)),
+                    "supported_variants" => print_field(module.supported_variants),
+                    "shared_libs" => print_field(module.shared_libs),
+                    "static_libs" => print_field(module.static_libs),
+                    "system_shared_libs" => print_field(module.system_shared_libs),
                     _ => {
-                        return Err(Box::new(CLIError(format!(
-                            "{}: unknown field",
-                            field.unwrap()
-                        ))))
+                        bail!("{}: unknown field", field.unwrap());
                     }
                 }
             } else {

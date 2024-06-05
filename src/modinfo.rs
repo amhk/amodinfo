@@ -1,8 +1,8 @@
+use anyhow::{anyhow, ensure, Result};
 use serde::Deserialize;
 
-use crate::error::ParseError;
-
 pub struct ModuleInfo<'data> {
+    // vector of (module-name, json-data), sorted by module-name
     data: Vec<(&'data str, &'data str)>,
 }
 
@@ -12,10 +12,12 @@ pub struct Module<'data> {
     pub name: &'data str,
     pub path: Vec<&'data str>,
     pub installed: Vec<&'data str>,
-    pub dependencies: Vec<&'data str>,
+    pub dependencies: Option<Vec<&'data str>>,
     pub class: Vec<&'data str>,
-    pub tags: Vec<&'data str>,
-    pub test_config: Vec<&'data str>,
+    pub supported_variants: Option<Vec<&'data str>>,
+    pub shared_libs: Option<Vec<&'data str>>,
+    pub static_libs: Option<Vec<&'data str>>,
+    pub system_shared_libs: Option<Vec<&'data str>>,
 }
 
 impl<'data> ModuleInfo<'data> {
@@ -23,81 +25,76 @@ impl<'data> ModuleInfo<'data> {
         self.data.iter().map(|line| line.0).collect()
     }
 
-    pub fn find(&self, name: &str) -> Option<Result<Module, ParseError>> {
+    pub fn find(&self, name: &str) -> Option<Result<Module>> {
         let index = self.data.binary_search_by(|pair| pair.0.cmp(name)).ok()?;
         let json = self.data[index].1;
-        let x = serde_json::from_str(json).map_err(|e| ParseError {
-            lineno: index + 2, // offset by two: omitted inital line + start counting from 1
-            message: format!("bad JSON: {}", e),
-        });
+        let x = serde_json::from_str(json).map_err(|e| anyhow!("bad JSON: {}", e));
         Some(x)
     }
 }
 
 impl<'data> TryFrom<&'data str> for ModuleInfo<'data> {
-    type Error = ParseError;
+    type Error = anyhow::Error;
 
-    fn try_from(data: &'data str) -> Result<Self, Self::Error> {
-        if !data.starts_with("{\n") {
-            return Err(ParseError {
-                lineno: 1,
-                message: "bad first line".to_string(),
-            });
-        }
-        let mut lines = data.split_terminator('\n').skip(1).collect::<Vec<_>>();
-        let n_lines = lines.len();
-        if let Some(last) = lines.pop() {
-            if last != "}" {
-                return Err(ParseError {
-                    lineno: n_lines,
-                    message: "bad last line".to_string(),
-                });
-            }
-        } else {
-            return Err(ParseError {
-                lineno: 1,
-                message: "too few lines".to_string(),
-            });
+    fn try_from(data: &'data str) -> Result<Self> {
+        ensure!(
+            data.starts_with("{\n"),
+            "unexpected start of module-info.json"
+        );
+        ensure!(data.ends_with("}\n"), "unexpected end of module-info.json");
+        let data = &data[2..data.len() - 2];
+
+        #[derive(PartialEq)]
+        enum State {
+            BeforeName,
+            InsideName,
+            BeforeJson,
+            InsideJson,
         }
 
-        // split ' "name": { ... }[,]' into ('name', '{ ... }')
-        let mut data = Vec::with_capacity(lines.len());
-        for (lineno, line) in lines.iter().enumerate().map(|pair| (pair.0 + 1, pair.1)) {
-            if !line.starts_with(" \"") {
-                return Err(ParseError {
-                    lineno,
-                    message: "no <name> element".to_string(),
-                });
+        let mut state = State::BeforeName;
+        let mut delimiter = '"';
+        let mut offsets = (0, 0, 0, 0);
+        let mut out = Vec::with_capacity(10_000);
+        for (i, ch) in data.chars().enumerate() {
+            if ch != delimiter {
+                continue;
             }
-            let line = &line[2..];
-            let name_end = line.find('"').ok_or(ParseError {
-                lineno,
-                message: "<name> element not terminated".to_string(),
-            })?;
-            let name = &line[..name_end];
+            match state {
+                State::BeforeName => {
+                    offsets.0 = i + 1;
+                    state = State::InsideName;
+                    delimiter = '"';
+                }
+                State::InsideName => {
+                    offsets.1 = i - 1;
+                    state = State::BeforeJson;
+                    delimiter = '{';
+                }
+                State::BeforeJson => {
+                    offsets.2 = i;
+                    state = State::InsideJson;
+                    delimiter = '}';
+                }
+                State::InsideJson => {
+                    offsets.3 = i;
+                    state = State::BeforeName;
+                    delimiter = '"';
 
-            let line = &line[name_end..];
-            if !line.starts_with("\": {") {
-                return Err(ParseError {
-                    lineno,
-                    message: "bad <name> terminator".to_string(),
-                });
-            }
-            let mut json = &line[3..];
-            if json.ends_with(',') {
-                json = &json[..json.len() - 1];
-            }
-            if !json.ends_with('}') {
-                return Err(ParseError {
-                    lineno,
-                    message: "<json> element not terminated".to_string(),
-                });
-            }
+                    ensure!(
+                        offsets.0 < offsets.1 && offsets.1 < offsets.2 && offsets.2 < offsets.3,
+                        "module-json: internal error: {:?}",
+                        offsets
+                    );
 
-            data.push((name, json));
+                    let name = &data[offsets.0..=offsets.1];
+                    let json = &data[offsets.2..=offsets.3];
+                    out.push((name, json));
+                }
+            }
         }
-
-        Ok(ModuleInfo { data })
+        ensure!(state == State::BeforeName, "module-json: corrupt data");
+        Ok(ModuleInfo { data: out })
     }
 }
 
@@ -105,7 +102,7 @@ impl<'data> TryFrom<&'data str> for ModuleInfo<'data> {
 mod tests {
     use super::*;
 
-    const MODULE_INFO: &str = include_str!("../tests/data/module-info.json");
+    const MODULE_INFO_LITE: &str = include_str!("../tests/data/module-info.json.lite");
 
     #[test]
     fn test_try_from() {
@@ -121,38 +118,27 @@ mod tests {
         assert!(ModuleInfo::try_from("{\n \"foo\": { ... \n}\n").is_err());
 
         // correct input
-        let modinfo = ModuleInfo::try_from("{\n}\n").unwrap();
-        assert_eq!(modinfo.data.len(), 0);
-
-        let modinfo = ModuleInfo::try_from("{\n \"foo\": { ... }\n}\n").unwrap();
-        assert_eq!(modinfo.data.len(), 1);
-
-        let modinfo = ModuleInfo::try_from(MODULE_INFO).unwrap();
-        assert_eq!(modinfo.data.len(), 64225);
+        let modinfo = ModuleInfo::try_from(MODULE_INFO_LITE).unwrap();
+        assert_eq!(modinfo.data.len(), 4);
     }
 
     #[test]
     fn test_module_names() {
-        let modinfo = ModuleInfo::try_from(MODULE_INFO).unwrap();
+        let modinfo = ModuleInfo::try_from(MODULE_INFO_LITE).unwrap();
         let names = modinfo.module_names();
-        assert_eq!(names.len(), 64225);
+        assert_eq!(names.len(), 4);
         let mut sorted = names.clone();
         sorted.sort();
         assert_eq!(names, sorted);
-        assert!(names.contains(&"idmap2"));
+        assert!(names.contains(&"zxing-core"));
     }
 
     #[test]
     fn test_find() {
-        let modinfo = ModuleInfo::try_from("{\n \"foo\": { ... }\n}\n").unwrap();
-        let module = modinfo.find("foo");
-        assert!(module.is_some());
-        let module = module.unwrap();
-        assert!(module.is_err());
-
-        let modinfo = ModuleInfo::try_from(MODULE_INFO).unwrap();
-        let module = modinfo.find("idmap2").unwrap().unwrap();
-        assert_eq!(module.name, "idmap2");
+        let modinfo = ModuleInfo::try_from(MODULE_INFO_LITE).unwrap();
+        let module = modinfo.find("zxing-core").unwrap().unwrap();
+        assert_eq!(module.name, "zxing-core");
+        assert_eq!(module.path, ["external/zxing"]);
 
         let module = modinfo.find("does-not-exist");
         assert!(module.is_none());
