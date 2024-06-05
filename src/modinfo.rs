@@ -11,7 +11,7 @@ pub struct Module<'data> {
     #[serde(rename = "module_name")]
     pub name: &'data str,
     pub path: Vec<&'data str>,
-    pub installed: Vec<&'data str>,
+    pub installed: Option<Vec<&'data str>>,
     pub dependencies: Option<Vec<&'data str>>,
     pub class: Vec<&'data str>,
     pub supported_variants: Option<Vec<&'data str>>,

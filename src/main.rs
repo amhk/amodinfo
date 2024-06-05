@@ -115,7 +115,7 @@ fn main() -> Result<()> {
                 match f.as_str() {
                     "name" => println!("{}", module.name),
                     "path" => print_field(Some(module.path)),
-                    "installed" => print_field(Some(module.installed)),
+                    "installed" => print_field(module.installed),
                     "dependencies" => print_field(module.dependencies),
                     "class" => print_field(Some(module.class)),
                     "supported_variants" => print_field(module.supported_variants),
