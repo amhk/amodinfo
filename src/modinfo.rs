@@ -1,5 +1,4 @@
 use anyhow::{anyhow, ensure, Result};
-use regex::Regex;
 use serde::Deserialize;
 
 pub struct ModuleInfo<'data> {
@@ -38,14 +37,63 @@ impl<'data> TryFrom<&'data str> for ModuleInfo<'data> {
     type Error = anyhow::Error;
 
     fn try_from(data: &'data str) -> Result<Self> {
-        let regex = Regex::new(r#"(?ms)^  "([^"]+)": (\{[^\}]+\})"#).unwrap();
-        let mut out = vec![];
-        for cap in regex.captures_iter(data) {
-            let name = cap.get(1).unwrap().as_str();
-            let json = cap.get(2).unwrap().as_str();
-            out.push((name, json));
+        ensure!(
+            data.starts_with("{\n"),
+            "unexpected start of module-info.json"
+        );
+        ensure!(data.ends_with("}\n"), "unexpected end of module-info.json");
+        let data = &data[2..data.len() - 2];
+
+        #[derive(PartialEq)]
+        enum State {
+            BeforeName,
+            InsideName,
+            BeforeJson,
+            InsideJson,
         }
-        ensure!(!out.is_empty(), "empty input");
+
+        let mut state = State::BeforeName;
+        let mut delimiter = '"';
+        let mut offsets = (0, 0, 0, 0);
+        let mut out = Vec::with_capacity(10_000);
+        for (i, ch) in data.chars().enumerate() {
+            if ch != delimiter {
+                continue;
+            }
+            match state {
+                State::BeforeName => {
+                    offsets.0 = i + 1;
+                    state = State::InsideName;
+                    delimiter = '"';
+                }
+                State::InsideName => {
+                    offsets.1 = i - 1;
+                    state = State::BeforeJson;
+                    delimiter = '{';
+                }
+                State::BeforeJson => {
+                    offsets.2 = i;
+                    state = State::InsideJson;
+                    delimiter = '}';
+                }
+                State::InsideJson => {
+                    offsets.3 = i;
+                    state = State::BeforeName;
+                    delimiter = '"';
+
+                    ensure!(
+                        offsets.0 < offsets.1 && offsets.1 < offsets.2 && offsets.2 < offsets.3,
+                        "module-json: internal error: {:?}",
+                        offsets
+                    );
+
+                    let name = &data[offsets.0..=offsets.1];
+                    let json = &data[offsets.2..=offsets.3];
+                    out.push((name, json));
+                }
+            }
+        }
+        ensure!(state == State::BeforeName, "module-json: corrupt data");
         Ok(ModuleInfo { data: out })
     }
 }
