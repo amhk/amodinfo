@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use anyhow::{anyhow, bail, Result};
 
+mod blueprint;
 mod modinfo;
 
 use modinfo::ModuleInfo;
