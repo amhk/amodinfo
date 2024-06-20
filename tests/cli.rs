@@ -28,6 +28,8 @@ mod integration {
         Command::cargo_bin("amodinfo")?
             .arg("--module-info")
             .arg("tests/data/module-info.json")
+            .arg("--android-top")
+            .arg("/dev/null")
             .arg("list")
             .assert()
             .success()
@@ -42,6 +44,8 @@ mod integration {
         Command::cargo_bin("amodinfo")?
             .arg("--module-info")
             .arg("tests/data/module-info.json")
+            .arg("--android-top")
+            .arg("/dev/null")
             .arg("show")
             .assert()
             .failure();
@@ -50,6 +54,8 @@ mod integration {
         Command::cargo_bin("amodinfo")?
             .arg("--module-info")
             .arg("tests/data/module-info.json")
+            .arg("--android-top")
+            .arg("/dev/null")
             .arg("show")
             .arg("does-not-exist")
             .assert()
@@ -59,6 +65,8 @@ mod integration {
         Command::cargo_bin("amodinfo")?
             .arg("--module-info")
             .arg("tests/data/module-info.json")
+            .arg("--android-top")
+            .arg("/dev/null")
             .arg("show")
             .arg("idmap2")
             .assert()
@@ -74,6 +82,8 @@ mod integration {
         Command::cargo_bin("amodinfo")?
             .arg("--module-info")
             .arg("tests/data/module-info.json")
+            .arg("--android-top")
+            .arg("/dev/null")
             .arg("show")
             .arg("idmap2")
             .arg("path")
@@ -86,6 +96,8 @@ mod integration {
         Command::cargo_bin("amodinfo")?
             .arg("--module-info")
             .arg("tests/data/module-info.json")
+            .arg("--android-top")
+            .arg("/dev/null")
             .arg("show")
             .arg("idmap2")
             .arg("foo")
@@ -99,6 +111,7 @@ mod integration {
     fn implicit_module_info_path() -> Result<(), Box<dyn Error>> {
         Command::cargo_bin("amodinfo")?
             .env("ANDROID_PRODUCT_OUT", "tests/data")
+            .env("ANDROID_BUILD_TOP", "/dev/null")
             .arg("show")
             .arg("idmap2")
             .assert()

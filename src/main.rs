@@ -1,10 +1,10 @@
 use clap::{App, AppSettings, Arg};
 use memmap::MmapOptions;
 use std::env;
-use std::fs::File;
+use std::fs::{self, File};
 use std::path::PathBuf;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 
 mod blueprint;
 mod modinfo;
@@ -14,6 +14,7 @@ use modinfo::ModuleInfo;
 #[derive(Debug)]
 struct Arguments {
     module_info_path: PathBuf,
+    android_top_path: PathBuf,
     command: Command,
 }
 
@@ -21,6 +22,7 @@ struct Arguments {
 enum Command {
     List,
     Show(String, Option<String>),
+    Source(String),
 }
 
 const MODULE_FIELDS: [&str; 9] = [
@@ -47,6 +49,14 @@ fn parse_args() -> Result<Arguments> {
                 .value_name("FILE")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("android-top")
+                .help("Path to top of Android tree")
+                .long_help("Path to the top of the Android tree; defaults to `$ANDROID_BUILD_TOP`.")
+                .long("android-top")
+                .value_name("DIR")
+                .takes_value(true),
+        )
         .subcommand(App::new("list").about("Prints the names of all modules"))
         .subcommand(
             App::new("show")
@@ -57,6 +67,13 @@ fn parse_args() -> Result<Arguments> {
                 .arg(Arg::with_name("FIELD")
                     .help("Name of field to show")
                     .possible_values(&MODULE_FIELDS)),
+        )
+        .subcommand(
+            App::new("source")
+                .about("Prints the Android.bp definition of module")
+                .arg(Arg::with_name("NAME")
+                    .help("Name of module to show")
+                    .required(true))
         )
         .get_matches();
 
@@ -70,6 +87,14 @@ fn parse_args() -> Result<Arguments> {
         path
     };
 
+    let android_top_path = if matches.is_present("android-top") {
+        matches.value_of("android-top").unwrap().into()
+    } else {
+        env::var("ANDROID_BUILD_TOP")
+            .map_err(|_| anyhow!("ANDROID_BUILD_TOP not set"))?
+            .into()
+    };
+
     let command = match &matches.subcommand() {
         ("list", _) => Command::List,
         ("show", Some(args)) => Command::Show(
@@ -78,11 +103,17 @@ fn parse_args() -> Result<Arguments> {
                 .to_string(),
             args.value_of("FIELD").map(|s| s.to_string()),
         ),
+        ("source", Some(args)) => Command::Source(
+            args.value_of("NAME")
+                .expect("value guaranteed by clap")
+                .to_string(),
+        ),
         (_, _) => unreachable!(),
     };
 
     Ok(Arguments {
         module_info_path,
+        android_top_path,
         command,
     })
 }
@@ -130,6 +161,27 @@ fn main() -> Result<()> {
             } else {
                 println!("{:#?}", module);
             }
+        }
+        Command::Source(name) => {
+            let module = modinfo
+                .find(&name)
+                .ok_or_else(|| anyhow!("{}: module not found", name))??;
+            ensure!(
+                module.path.len() == 1,
+                "{}: module does not have exactly one path: {:?}",
+                name,
+                module.path
+            );
+            let blueprint_path = format!(
+                "{}/{}/Android.bp",
+                args.android_top_path.display(),
+                module.path[0]
+            );
+            let blueprint_contents = fs::read_to_string(&blueprint_path)
+                .with_context(|| format!("could not read file {}", blueprint_path))?;
+            let module_source = blueprint::find_module_source(&blueprint_contents, &name)?
+                .ok_or_else(|| anyhow!("{}: module source not found", name))?;
+            println!("{}", module_source);
         }
     }
 
