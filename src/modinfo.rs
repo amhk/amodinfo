@@ -82,7 +82,7 @@ impl<'data> TryFrom<&'data str> for ModuleInfo<'data> {
                     delimiter = '"';
 
                     ensure!(
-                        offsets.0 < offsets.1 && offsets.1 < offsets.2 && offsets.2 < offsets.3,
+                        offsets.0 <= offsets.1 && offsets.1 <= offsets.2 && offsets.2 <= offsets.3,
                         "module-json: internal error: {:?}",
                         offsets
                     );
