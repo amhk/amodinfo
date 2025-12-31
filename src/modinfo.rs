@@ -25,7 +25,7 @@ impl<'data> ModuleInfo<'data> {
         self.data.iter().map(|line| line.0).collect()
     }
 
-    pub fn find(&self, name: &str) -> Option<Result<Module>> {
+    pub fn find(&self, name: &str) -> Option<Result<Module<'_>>> {
         let index = self.data.binary_search_by(|pair| pair.0.cmp(name)).ok()?;
         let json = self.data[index].1;
         let x = serde_json::from_str(json).map_err(|e| anyhow!("bad JSON: {}", e));
